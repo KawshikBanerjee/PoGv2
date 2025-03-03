@@ -1,21 +1,31 @@
 
 subobjective_prompt = """Please break down the process of answering the question into as few subobjectives as possible based on semantic analysis.
-Here is an example: 
-Q: Which of the countries in the Caribbean has the smallest country calling code?
-Output: ['Search the countries in the Caribbean', 'Search the country calling code for each Caribbean country', 'Compare the country calling codes to find the smallest one']
+For each subobjective, determine first if it is a 'hard constraint' that 'must' be satisfied for the main objective. Also determine if the subobjectives are dependent on each other's output.
 
-Now you need to directly output subobjectives of the following question in list format without other information or notes. 
+Here are two examples:
+Q: Which of the countries in the Caribbean has the smallest country calling code?
+Output: [{Subobjective_1: 'Search the countries in the Caribbean', hard: true, depends_on: []},
+{Subobjective_2: 'Search the country calling code for each Caribbean country', hard: true, depends_on: [Subobjective_1]},
+{Subobjective_3: 'Compare the country calling codes to find the smallest one', hard: false, depends_on: [Subobjective_2]}]
+
+Q: Which of the actors were cast in both Harry Potter and Game of Thrones franchise?
+Output: [{Subobjective_1: 'Search the actors in the Harry Potter movies', hard: true, depends_on: []},
+{Subobjective_2: 'Search the actors in the Game of Thrones show', hard: true, depends_on: []},
+{Subobjective_3: 'Find common actors from Harry Potter and Game of Thrones franchises', hard: false, depends_on: [Subobjective_1, Subobjective_2]}]
+
+Now you need to directly output subobjectives of the following question in list format without other information or notes.
 Q: """
 
 
 
-extract_relation_prompt = """Please provide as few highly relevant relations as possible to the question and its subobjectives from the following relations (separated by semicolons).
+extract_relation_prompt = """Please provide as few highly relevant relations as possible that help satisfy the hard constraints and are relevant to the question and its subobjectives from the following relations (separated by semicolons).
+If there are multiple independent subobjectives, extract relations parallelly and ensure that relations relevant to each independent subobjective are included, prioritizing those with hard constraints.
 Here is an example:
 Q: Name the president of the country whose main spoken language was Brahui in 1980?
-Subobjectives: ['Identify the countries where the main spoken language is Brahui', 'Find the president of each country', 'Determine the president from 1980']
+{Subobjective_1: 'Identify the countries where the main spoken language is Brahui'. hard: false,  depends_on: []}
 Topic Entity: Brahui Language
 Relations: language.human_language.main_country; language.human_language.language_family; language.human_language.iso_639_3_code; base.rosetta.languoid.parent; language.human_language.writing_system; base.rosetta.languoid.languoid_class; language.human_language.countries_spoken_in; kg.object_profile.prominent_type; base.rosetta.languoid.document; base.ontologies.ontology_instance.equivalent_instances; base.rosetta.languoid.local_name; language.human_language.region
-The output is: 
+The output is:
 ['language.human_language.main_country','language.human_language.countries_spoken_in','base.rosetta.languoid.parent']
 
 Now you need to directly output relations highly related to the following question and its subobjectives in list format without other information or notes.
@@ -94,7 +104,8 @@ Now you need to directly output the results of the following question in JSON fo
 Q: """
 
 prune_entity_prompt = """
-Which entities in the following list ([] in Triples) can be used to answer question? Please provide the minimum possible number of entities, and strictly adhering to the constraints mentioned in the question. 
+Which entities in the following list ([] in Triples) can be used to answer question? Please provide the minimum possible number of entities, and strictly adhering to the constraints mentioned in the question.
+If multiple independent subobjectives have been explored in parallel, ensure that you select entities that satisfy each branch as necessary.
 Here is an example:
 Q: The movie featured Miley Cyrus and was produced by Tobin Armbrust?
 Triplets: Tobin Armbrust film.producer.film ['The Resident', 'So Undercover', 'Let Me In', 'Begin Again', 'The Quiet Ones', 'A Walk Among the Tombstones']
@@ -104,17 +115,18 @@ Now you need to directly output the entities from [] in Triplets for the followi
 Q: """
 
 update_mem_prompt = """Based on the provided information (which may have missing parts and require further retrieval) and your own knowledge, output the currently known information required to achieve the subobjectives.
+If multiple subobjectives have been processed in parallel, merge the retrieved information accordingly.
 Here is an example:
 Q: Find the person who said "Taste cannot be controlled by law", what did this person die from?
 Subobjectives: ['Search the person who said "Taste cannot be controlled by law"', 'Search the cause of death for that person']
-Memory: 
+Memory:
 Knowledge Triplets: Taste cannot be controlled by law. media_common.quotation.author [Thomas Jefferson]
 Output: {
     "1": "Thomas Jefferson said 'Taste cannot be controlled by law'.",
     "2": "It is not mentioned, and I also don't know."
 }
 
-Now you need to directly output the results of the following question in JSON format without other information or notes. 
+Now you need to directly output the results of the following question in JSON format without other information or notes.
 Q: """
 
 
@@ -216,7 +228,7 @@ Q: Which of the countries in the Caribbean has the smallest country calling code
 Entities set to be retrieved: ['Anguilla', 'Saint Lucia']
 Memory: Caribbean contains Antilles and Saint Lucia
 Knowledge Triplets: Caribbean, location.location.contains, ['Antilles', 'Saint Lucia']
-Output: 
+Output:
 {
     "Add": "Yes",
     "Reason": "The entities set ignores other countries in Caribbean."
@@ -226,7 +238,7 @@ Q: The artist nominated for The Long Winter lived where?
 Entities set to be retrieved: ['Laura Ingalls Wilder']
 Memory: "The author of The Long Winter is Laura Ingalls Wilder."
 Knowledge Triplets: The Long Winter, book.written_work.author, [Laura Ingalls Wilder]
-Output: 
+Output:
 {
     "Add": "No",
     "Reason": "Now you need to search where Laura Ingalls Wilder lived."
@@ -252,7 +264,9 @@ Now you need to directly output the results for the following Q in the list form
 Q: """
 
 
-cot_prompt = """Please answer the question according to your knowledge step by step. Here is an example:
+cot_prompt = """Please answer the question according to your knowledge step by step.
+If independent subobjectives have been processed in parallel, integrate the reasoning from each of them into your final answer.
+Here is an example:
 Q: What state is home to the university that is represented in sports by George Washington Colonials men's basketball?
 The output is:
 {
